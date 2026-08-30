@@ -1,0 +1,54 @@
+{
+  "mode": "pir",
+  "sleep_secs": 0.2,
+  "quiet": false,
+  "pins": {
+    "pir": 4,
+    "rcwl": 17
+  },
+  "mpd": {
+    "volume_step": 1,
+    "volume_min": 0,
+    "volume_max": 60,
+    "pause_at_zero": true
+  },
+  "tof": {
+    "min_cm": 25.0,
+    "max_cm": 170.0,
+    "distance_mode": 1,
+    "timing_budget_ms": 100,
+    "enter_count": 3,
+    "exit_count": 150
+  },
+  "pir": {
+    "enter_count": 8,
+    "absence_seconds": 14,
+    "pull_up": false
+  },
+  "rcwl": {
+    "enter_count": 5,
+    "absence_seconds": 30,
+    "pull_up": false
+  },
+  "tof_pir": {
+    "pir_enter_count": 5,
+    "tof_enter_count": 3,
+    "tof_absence_seconds": 60
+  },
+  "counter_max": 1000,
+  "puck": {
+    "enabled": true,
+    "bridge_script": "puckberry_bridge.py",
+    "state_file": "/tmp/mpdmotion_puck_state.json",
+    "device_name": "poopuck",
+    "device_address": null,
+    "scan_timeout": 10.0,
+    "reconnect_delay": 3.0,
+    "lock_file": "/tmp/mpdmotion_puck_bridge.lock",
+    "boost_volume": 100,
+    "quiet_volume": 25,
+    "boost_clear_after_absence_seconds": 90,
+    "quiet_clear_after_absence_seconds": 300,
+    "manual_volume_step": 5
+  }
+}
