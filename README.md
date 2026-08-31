@@ -55,6 +55,29 @@ Puck's BLE name) are set in `mpdmotion_presence.json`. The default file
 used is `mpdmotion_presence.json` in the working directory, or the one
 given via `--config` or the `MPDMOTION_CONFIG` environment variable.
 
+### Security
+
+The Puck.js remote uses two independent BLE channels, with different
+guarantees:
+
+- **Command channel** — non-connectable advertising broadcast (manufacturer
+  data), scanned passively by `puckberry_bridge.py`. It has **no
+  authentication**: anyone in BLE range can broadcast a matching packet and
+  spoof a command. The impact is limited to what `puckberry_bridge.py` can
+  trigger — forcing boost/quiet volume or skipping a track — nothing else.
+- **Programming channel** — the BLE GATT/UART connection an Espruino IDE
+  uses to read or rewrite the code running on the Puck. The firmware in
+  `poopuck.js` keeps this channel closed at all times (`connectable:
+  false`), so nobody can connect over BLE to reprogram the device;
+  reprogramming is done over USB only. `E.setPassword(...)` is set as
+  defense in depth in case `connectable` is ever temporarily re-enabled
+  (e.g. for an OTA update).
+
+Before flashing `poopuck.js`, replace the placeholder password with a real
+one, then run `save()` from the Espruino console so both the password and
+the non-connectable state persist across resets/power loss (not just in
+RAM).
+
 ### Running it
 
 ```
@@ -118,6 +141,31 @@ Tutti i parametri (pin, soglie di ingresso/uscita, volumi, timeout, nome
 BLE del Puck) si impostano in `mpdmotion_presence.json`. Il file di default
 usato è `mpdmotion_presence.json` nella working directory, oppure quello
 indicato con `--config` o dalla variabile d'ambiente `MPDMOTION_CONFIG`.
+
+### Sicurezza
+
+Il telecomando Puck.js usa due canali BLE indipendenti, con garanzie
+diverse:
+
+- **Canale comandi** — advertising broadcast non connettibile
+  (manufacturer data), letto passivamente da `puckberry_bridge.py`. **Non
+  ha autenticazione**: chiunque nel raggio BLE può trasmettere un pacchetto
+  contraffatto e forzare un comando. L'impatto è limitato a ciò che
+  `puckberry_bridge.py` può innescare — forzare volume boost/quiet o
+  saltare traccia — niente altro.
+- **Canale di programmazione** — la connessione BLE GATT/UART che
+  l'Espruino IDE usa per leggere o riscrivere il codice del Puck. Il
+  firmware in `poopuck.js` tiene questo canale sempre chiuso
+  (`connectable: false`), quindi nessuno può connettersi via BLE per
+  riprogrammare il device; la riprogrammazione avviene solo via USB.
+  `E.setPassword(...)` è impostata come difesa in profondità nel caso in
+  cui `connectable` venga in futuro riattivato temporaneamente (es. per un
+  aggiornamento OTA).
+
+Prima di flashare `poopuck.js`, sostituisci la password placeholder con
+una vera, poi esegui `save()` dalla console Espruino così sia la password
+sia lo stato non connettibile persistono ai reset/spegnimenti (non restano
+solo in RAM).
 
 ### Avvio
 
