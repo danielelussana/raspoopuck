@@ -49,6 +49,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "volume_min": 0,
         "volume_max": 90,
         "pause_at_zero": True,
+        "idle_volume": 0,
+        "idle_volume_safety_margin": 20,
     },
     "tof": {
         "min_cm": 25.0,
@@ -124,6 +126,11 @@ def clamp(value: int, minimum: int, maximum: int) -> int:
 
 def mpc(*args: str) -> None:
     run(["mpc", *args], check=False, stdout=DEVNULL, stderr=DEVNULL)
+
+
+def mpd_is_playing() -> bool:
+    proc = run(["mpc", "status"], check=False, stdout=PIPE, stderr=DEVNULL, text=True)
+    return "[playing]" in (proc.stdout or "")
 
 
 def yesno(value: bool) -> str:
@@ -691,6 +698,12 @@ def main() -> None:
     volume_min = int(mpd_cfg["volume_min"])
     volume_max = int(mpd_cfg["volume_max"])
     pause_at_zero = bool(mpd_cfg.get("pause_at_zero", True))
+    idle_volume_raw = int(mpd_cfg.get("idle_volume", 0))
+    idle_volume_safety_margin = int(mpd_cfg.get("idle_volume_safety_margin", 20))
+    if idle_volume_raw > volume_max:
+        idle_volume = clamp(volume_max - idle_volume_safety_margin, volume_min, volume_max)
+    else:
+        idle_volume = clamp(idle_volume_raw, volume_min, volume_max)
     sleep_secs = float(cfg["sleep_secs"])
     quiet = bool(cfg.get("quiet", False))
     puck_cfg = cfg.get("puck", {})
@@ -735,6 +748,9 @@ def main() -> None:
             puck_mode, puck_age = update_puck_state_for_presence(puck_cfg, presence)
 
             if presence:
+                if not mpd_is_playing():
+                    mpc("play")
+
                 if puck_mode == "boost":
                     target_volume = boost_volume
                     step = manual_volume_step
@@ -744,9 +760,8 @@ def main() -> None:
                 else:
                     target_volume = volume_max
                     step = volume_step
-                mpc("play")
             else:
-                target_volume = volume_min
+                target_volume = idle_volume if idle_volume > 0 else volume_min
                 step = volume_step
 
             new_volume = step_volume_towards(volume, target_volume, step)
@@ -754,7 +769,7 @@ def main() -> None:
                 volume = clamp(new_volume, volume_min, 100)
                 mpc("volume", str(volume))
 
-            if not presence and pause_at_zero and volume == volume_min:
+            if not presence and idle_volume == 0 and pause_at_zero and volume == volume_min:
                 mpc("pause")
 
             puck_text = "-" if puck_mode is None else f"{puck_mode}:{puck_age:0.0f}s"

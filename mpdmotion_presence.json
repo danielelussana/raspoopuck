@@ -10,7 +10,9 @@
     "volume_step": 1,
     "volume_min": 0,
     "volume_max": 60,
-    "pause_at_zero": true
+    "pause_at_zero": true,
+    "idle_volume": 0,
+    "idle_volume_safety_margin": 20
   },
   "tof": {
     "min_cm": 25.0,
