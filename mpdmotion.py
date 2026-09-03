@@ -52,6 +52,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "idle_volume": 0,
         "idle_volume_safety_margin": 20,
     },
+    "schedule": {
+        "enabled": False,
+        "start": "08:00",
+        "end": "22:00",
+    },
     "tof": {
         "min_cm": 25.0,
         "max_cm": 170.0,
@@ -131,6 +136,33 @@ def mpc(*args: str) -> None:
 def mpd_is_playing() -> bool:
     proc = run(["mpc", "status"], check=False, stdout=PIPE, stderr=DEVNULL, text=True)
     return "[playing]" in (proc.stdout or "")
+
+
+def parse_hhmm(value: str) -> tuple[int, int]:
+    hh, mm = str(value).split(":", 1)
+    return clamp(int(hh), 0, 23), clamp(int(mm), 0, 59)
+
+
+def is_within_schedule(start: str, end: str, now: Optional[time.struct_time] = None) -> bool:
+    """
+    True se l'ora corrente è dentro [start, end).
+    Gestisce anche finestre notturne (es. 22:00 -> 06:00).
+    Se start == end la finestra copre l'intera giornata (fail-safe: una
+    schedulazione lasciata sui valori di default non silenzia tutto).
+    """
+    now = now or time.localtime()
+    now_minutes = now.tm_hour * 60 + now.tm_min
+
+    start_h, start_m = parse_hhmm(start)
+    end_h, end_m = parse_hhmm(end)
+    start_minutes = start_h * 60 + start_m
+    end_minutes = end_h * 60 + end_m
+
+    if start_minutes == end_minutes:
+        return True
+    if start_minutes < end_minutes:
+        return start_minutes <= now_minutes < end_minutes
+    return now_minutes >= start_minutes or now_minutes < end_minutes
 
 
 def yesno(value: bool) -> str:
@@ -711,6 +743,11 @@ def main() -> None:
     quiet_volume = clamp(int(puck_cfg.get("quiet_volume", 25)), volume_min, 100)
     manual_volume_step = int(puck_cfg.get("manual_volume_step", max(volume_step, 5)))
 
+    schedule_cfg = cfg.get("schedule", {})
+    schedule_enabled = bool(schedule_cfg.get("enabled", False))
+    schedule_start = str(schedule_cfg.get("start", "00:00"))
+    schedule_end = str(schedule_cfg.get("end", "23:59"))
+
     volume = volume_min
     last_presence: Optional[bool] = None
     last_puck_mode: Optional[str] = None
@@ -724,6 +761,8 @@ def main() -> None:
         f"ToF range: {float(cfg['tof']['min_cm']):.1f}-{float(cfg['tof']['max_cm']):.1f} cm",
         flush=True,
     )
+    if schedule_enabled:
+        print(f"Scheduling attivo: {schedule_start}-{schedule_end}", flush=True)
     print("CTRL+C per uscire", flush=True)
 
     puck_bridge_proc = start_puck_bridge(cfg, args.config, quiet)
@@ -745,9 +784,12 @@ def main() -> None:
         while True:
             presence, detail = detector.update()
 
-            puck_mode, puck_age = update_puck_state_for_presence(puck_cfg, presence)
+            schedule_active = (not schedule_enabled) or is_within_schedule(schedule_start, schedule_end)
+            effective_presence = presence and schedule_active
 
-            if presence:
+            puck_mode, puck_age = update_puck_state_for_presence(puck_cfg, effective_presence)
+
+            if effective_presence:
                 if not mpd_is_playing():
                     mpc("play")
 
@@ -761,7 +803,7 @@ def main() -> None:
                     target_volume = volume_max
                     step = volume_step
             else:
-                target_volume = idle_volume if idle_volume > 0 else volume_min
+                target_volume = idle_volume if (idle_volume > 0 and schedule_active) else volume_min
                 step = volume_step
 
             new_volume = step_volume_towards(volume, target_volume, step)
@@ -769,20 +811,26 @@ def main() -> None:
                 volume = clamp(new_volume, volume_min, 100)
                 mpc("volume", str(volume))
 
-            if not presence and idle_volume == 0 and pause_at_zero and volume == volume_min:
+            if not schedule_active:
+                # Fuori dalla finestra di scheduling: sempre disattivo,
+                # a prescindere da idle_volume/pause_at_zero.
+                if volume == volume_min:
+                    mpc("pause")
+            elif not effective_presence and idle_volume == 0 and pause_at_zero and volume == volume_min:
                 mpc("pause")
 
             puck_text = "-" if puck_mode is None else f"{puck_mode}:{puck_age:0.0f}s"
+            sched_text = "" if not schedule_enabled else f" sched={yesno(schedule_active)}"
             if not quiet:
                 print(
                     f"presence={yesno(presence):2s} volume={volume:3d} target={target_volume:3d} "
-                    f"puck={puck_text} | {detail}",
+                    f"puck={puck_text}{sched_text} | {detail}",
                     flush=True,
                 )
             elif presence != last_presence or puck_mode != last_puck_mode:
                 print(
                     f"presence={yesno(presence):2s} volume={volume:3d} target={target_volume:3d} "
-                    f"puck={puck_text} | {detail}",
+                    f"puck={puck_text}{sched_text} | {detail}",
                     flush=True,
                 )
 
