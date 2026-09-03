@@ -15,9 +15,9 @@
     "idle_volume_safety_margin": 20
   },
   "schedule": {
-    "enabled": false,
-    "start": "08:00",
-    "end": "22:00"
+    "enabled": true,
+    "start": "09:00",
+    "end": "20:00"
   },
   "tof": {
     "min_cm": 25.0,
